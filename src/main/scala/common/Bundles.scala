@@ -39,6 +39,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
 
 // Bundle between VDQ and Backend
 class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams with HasVectorDecoderSignals {
+  val uopId = UInt(64.W)
   val pc = UInt(vaddrBitsExtended.W)
   val bits = UInt(32.W)
   val vconfig = new VConfig
@@ -126,6 +127,7 @@ class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p
   def bankId = if (vrfBankBits == 0) 0.U else eg(vrfBankBits-1,0)
   val data = UInt(writeBits.W)
   val mask = UInt(writeBits.W)
+  val uopId = UInt(64.W)
 }
 
 class ScalarWrite extends Bundle {
@@ -133,6 +135,7 @@ class ScalarWrite extends Bundle {
   val fp = Bool()
   val size = UInt(2.W)
   val rd = UInt(5.W)
+  val uopId = UInt(64.W)
 }
 
 class VectorReadReq(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -226,6 +229,7 @@ class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) 
   val head = Bool()
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
+  val uopId = UInt(64.W)
   def vxrm = rm(1,0)
   def frm = rm
 }
@@ -252,6 +256,7 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val debug_id = UInt(debugIdSz.W)
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
+  val uopId = UInt(64.W)
 }
 
 class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -263,6 +268,7 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val tail = Bool()
   val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)
+  val uopId = UInt(64.W)
 }
 
 class SpecialMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -275,6 +281,7 @@ class SpecialMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val vmu = Bool()
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
   val tail = Bool()
+  val uopId = UInt(64.W)
 }
 
 class SpecialMicroOpWithData(implicit p: Parameters) extends SpecialMicroOp {

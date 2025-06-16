@@ -55,6 +55,7 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   }
 
   io.vat := inst.vat
+  io.uopId := inst.uopId
   io.seq_hazard.valid := valid
   io.seq_hazard.bits.rintent := hazardMultiply(rvd_mask | rvm_mask)
   io.seq_hazard.bits.wintent := 0.U
@@ -82,6 +83,7 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   io.iss.bits.debug_id := inst.debug_id
   io.iss.bits.tail := tail
   io.iss.bits.vat := inst.vat
+  io.iss.bits.uopId := inst.uopId
 
   val head_mask = get_head_mask(~(0.U(mLenB.W)), eidx     , inst.mem_elem_size, mLen)
   val tail_mask = get_tail_mask(~(0.U(mLenB.W)), next_eidx, inst.mem_elem_size, mLen)

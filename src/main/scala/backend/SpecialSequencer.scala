@@ -117,6 +117,7 @@ class SpecialSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   }
 
   io.vat := inst.vat
+  io.uopId := inst.uopId
   io.seq_hazard.valid := valid && (!acc || acc_e0)
   io.seq_hazard.bits.rintent := hazardMultiply(Mux(acc, get_arch_mask(inst.rs1, 0.U), rvs2_mask | rvm_mask))
   io.seq_hazard.bits.wintent := false.B
@@ -154,6 +155,7 @@ class SpecialSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.iss.bits.vmu       := inst.vmu
   io.iss.bits.tail      := tail
   io.iss.bits.slide     := slide
+  io.iss.bits.uopId     := inst.uopId
 
   io.acc_init := Mux1H(acc_init_sel, Seq(
     0.U(dLen.W),

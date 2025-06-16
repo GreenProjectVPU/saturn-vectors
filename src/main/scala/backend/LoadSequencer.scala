@@ -50,6 +50,7 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   }
 
   io.vat := inst.vat
+  io.uopId := inst.uopId
   io.seq_hazard.valid := valid
   io.seq_hazard.bits.rintent := hazardMultiply(rvm_mask)
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
@@ -71,6 +72,7 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.iss.bits.tail       := tail
   io.iss.bits.vat        := inst.vat
+  io.iss.bits.uopId      := inst.uopId
   io.iss.bits.debug_id   := inst.debug_id
   io.iss.bits.eidx       := eidx
 

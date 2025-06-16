@@ -44,10 +44,12 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
       sg.module.io.vec <> vmu.io.sgmem.get
     }
 
+    dis.io.hartId := io.hartId
     dis.io.issue <> vfu.io.issue
     vfu.io.core <> io
     vfu.io.sg_base := io_sg_base
 
+    vu.io.hartId := io.hartId
     vu.io.index_access <> vfu.io.index_access
     vu.io.mask_access <> vfu.io.mask_access
     vu.io.vmu <> vmu.io.vu

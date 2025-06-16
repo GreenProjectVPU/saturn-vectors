@@ -24,6 +24,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
     val busy = Output(Bool())
     val s0 = new Bundle {
       val in = Input(Valid(new Bundle {
+        val uopId = UInt(64.W)
         val inst = UInt(32.W)
         val pc = UInt(vaddrBitsExtended.W)
         val status = new MStatus
@@ -37,6 +38,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
     }
 
     val s1 = new Bundle {
+      val valid = Output(Bool())
       val inst = Output(new VectorIssueInst)
       val rs1 = Input(Valid(UInt(xLen.W)))
       val kill = Input(Bool())
@@ -67,6 +69,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   io.busy := s1_valid || s2_valid
 
   val s0_inst = Wire(new VectorIssueInst)
+  s0_inst.uopId   := io.s0.in.bits.uopId
   s0_inst.pc      := io.s0.in.bits.pc
   s0_inst.bits    := io.s0.in.bits.inst
   s0_inst.vconfig := io.s0.in.bits.vconfig
@@ -146,6 +149,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
     }
   }
 
+  io.s1.valid := s1_valid
   io.s1.inst := s1_inst
   io.s1.tlb_req.valid := RegNext(io.s0.tlb_req.valid, false.B)
   io.s1.tlb_req.bits  := RegEnable(io.s0.tlb_req.bits, s0_tlb_valid)

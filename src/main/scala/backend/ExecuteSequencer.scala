@@ -193,6 +193,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   }
 
   io.vat := inst.vat
+  io.uopId := inst.uopId
   io.seq_hazard.valid := valid
   io.seq_hazard.bits.rintent := hazardMultiply(rvs1_mask | rvs2_mask | rvd_mask | rvm_mask)
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
@@ -289,6 +290,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.tail      := tail
   io.iss.bits.head      := head
   io.iss.bits.vat       := inst.vat
+  io.iss.bits.uopId     := inst.uopId
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
   io.iss.bits.iterative := !pipelined

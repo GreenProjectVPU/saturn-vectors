@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
+import shuttle.trace.KanataTracer
 
 class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   override def desiredName = s"ExecutionUnit$desc"
@@ -20,6 +21,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
   val maxPipeDepth = (pipe_fus.map(_._1.depth) :+ 0).max
 
   val io = IO(new Bundle {
+    val hartId = Input(UInt(p(MaxHartIdBits).W))
     val iss = Flipped(Decoupled(new ExecuteMicroOpWithData(nFUs)))
     val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(maxPipeDepth))))
     val iter_write = Decoupled(new VectorWrite(dLen))
@@ -120,6 +122,36 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       }
     }
 
+    pipe_bits.foreach(dontTouch(_))
+    pipe_valids.foreach(dontTouch(_))
+
+    for ((fu, j) <- pipe_fus) {
+      KanataTracer.saturnStage(
+        KanataTracer.SaturnStage.Vx,
+        clock,
+        reset,
+        io.hartId,
+        pipe_valids.head && pipe_bits.head.fu_sel(j),
+        pipe_bits.head.uopId,
+      )
+
+      // the last stage is always invalid if the pipeline is more than 1 stage long.
+      val (last_stage_valid, last_stage_bits) = if (fu.depth > 1) {
+        (RegNext(pipe_valids(fu.depth - 1)), RegNext(pipe_bits(fu.depth - 1)))
+      } else {
+        (pipe_valids(fu.depth - 1), pipe_bits(fu.depth - 1))
+      }
+
+      KanataTracer.saturnStage(
+        KanataTracer.SaturnStage.VxEnd,
+        clock,
+        reset,
+        io.hartId,
+        last_stage_valid && last_stage_bits.fu_sel(j),
+        last_stage_bits.uopId,
+      )
+    }
+
     // Selects which pipe register has the write
     val write_pipe_sel = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v,b),i) =>
       v && b.pipe_depth === i.U
@@ -164,15 +196,37 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
     io.iter_write.bits.eg   := iter_write_arb.io.out.bits.eg
     io.iter_write.bits.mask := iter_write_arb.io.out.bits.mask
     io.iter_write.bits.data := iter_write_arb.io.out.bits.data
+    io.iter_write.bits.uopId := iter_write_arb.io.out.bits.uopId
     when (!pipe_write) {
       io.acc_write.valid := iter_write_arb.io.out.valid && acc
       io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.eg))
       io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.data))
       io.acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.mask))
+      io.acc_write.bits.uopId := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.uopId))
     }
     when (iter_fus.map(_._1.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
       io.iter_hazards(i) := iter_fus(i)._1.io.hazard
+    }
+
+    for ((fu, _) <- iter_fus) {
+      KanataTracer.saturnStage(
+        KanataTracer.SaturnStage.Vx,
+        clock,
+        reset,
+        io.hartId,
+        fu.io.valid,
+        fu.io.op.uopId,
+      )
+
+      KanataTracer.saturnStage(
+        KanataTracer.SaturnStage.VxEnd,
+        clock,
+        reset,
+        io.hartId,
+        fu.io.valid && fu.io.last,
+        fu.io.op.uopId,
+      )
     }
   }
 }

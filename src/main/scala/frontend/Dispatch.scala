@@ -6,12 +6,13 @@ import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
-
 import saturn.common._
 import saturn.insns._
+import shuttle.trace.KanataTracer
 
 class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val hartId = Input(UInt(hartIdLen.W))
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
     val mem = Decoupled(new VectorMemMacroOp)
@@ -88,6 +89,7 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   }
 
   io.scalar_resp.valid := false.B
+  io.scalar_resp.bits.uopId := io.issue.bits.uopId
   io.scalar_resp.bits.fp := false.B
   io.scalar_resp.bits.rd := io.issue.bits.rd
   io.scalar_resp.bits.size := 3.U
@@ -107,6 +109,15 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   }
 
   io.dis.bits := issue_inst
+
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.Dis,
+    clock,
+    reset,
+    io.hartId,
+    io.dis.valid,
+    io.dis.bits.uopId,
+  )
 
   io.mem.bits.base_offset := issue_inst.rs1_data
   io.mem.bits.stride := issue_inst.rs2_data

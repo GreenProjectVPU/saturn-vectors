@@ -10,9 +10,12 @@ import saturn.mem._
 import saturn.exu._
 import saturn.common._
 import saturn.insns._
+import shuttle.trace.KanataTracer
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val hartId = Input(UInt(hartIdLen.W))
+
     val dis = Flipped(Decoupled(new VectorIssueInst))
 
     val vmu = Flipped(new VectorMemDatapathIO)
@@ -76,6 +79,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.fp_req.valid := false.B
   io.fp_req.bits := DontCare
+  flat_vxus.foreach(_.io.hartId := io.hartId)
   vxus.foreach(_.foreach(_.io.shared_fp_req := DontCare))
   vxus.foreach(_.foreach(_.io.shared_fp_resp := DontCare))
 
@@ -118,6 +122,30 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.wvd   := false.B
     issq.io.enq.bits.scalar_to_vd0 := false.B
     issq.io.enq.bits.rs1_is_rs2 := false.B
+  }
+
+  for (issq <- allIssQs) {
+    // this only traces the head of the queue.
+    // since the queue is not flushable, it should be fine.
+    KanataTracer.saturnStage(
+      KanataTracer.SaturnStage.Iss,
+      clock,
+      reset,
+      io.hartId,
+      issq.io.enq.valid,
+      issq.io.enq.bits.uopId,
+    )
+  }
+
+  for (seq <- allSeqs) {
+    KanataTracer.saturnStage(
+      KanataTracer.SaturnStage.Seq,
+      clock,
+      reset,
+      io.hartId,
+      seq.io.iss.valid,
+      seq.io.uopId,
+    )
   }
 
   val dis_ctrl = Wire(new VectorDecodedControl(all_supported_insns, Seq(
@@ -259,6 +287,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Connect reads to VRF
 
   val vrf = Module(new RegisterAccess(flat_vxs.size, maxPipeDepth))
+  vrf.io.hartId := io.hartId
+
   vrf.io.vls.rvm.req <> vls.io.rvm
   vrf.io.vss.rvd.req <> vss.io.rvd
   vrf.io.vss.rvm.req <> vss.io.rvm
@@ -365,6 +395,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
   load_write.bits.data := Fill(dLen / mLen, io.vmu.lresp.bits.data)
+  load_write.bits.uopId := vls.io.iss.bits.uopId
   val load_wmask = Mux(vls.io.iss.bits.use_rmask,
     get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size, dLen),
     ~(0.U(dLenB.W)))

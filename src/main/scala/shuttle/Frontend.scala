@@ -8,12 +8,12 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.diplomacy._
-
 import saturn.common._
-import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLSplitInterface, SGTLInterface}
-import saturn.frontend.{PipelinedFaultCheck, IterativeFaultCheck}
+import saturn.backend.VectorBackend
+import saturn.mem.{MemRequest, SGTLInterface, ScalarMemOrderCheckIO, TLSplitInterface}
+import saturn.frontend.{IterativeFaultCheck, PipelinedFaultCheck}
 import shuttle.common._
+import shuttle.trace.KanataTracer
 
 
 class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -36,6 +36,7 @@ class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Pa
 
   pfc.io.sg_base            := io.sg_base
   pfc.io.s0.in.valid        := io.core.ex.valid && !ifc.io.busy && !(replayed && !io.issue.ready)
+  pfc.io.s0.in.bits.uopId   := io.core.ex.uop.id
   pfc.io.s0.in.bits.inst    := io.core.ex.uop.inst
   pfc.io.s0.in.bits.pc      := io.core.ex.uop.pc
   pfc.io.s0.in.bits.status  := io.core.status
@@ -46,9 +47,27 @@ class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Pa
   pfc.io.s0.in.bits.phys    := !(io.core.status.dprv <= PRV.S.U && io.core.satp.mode(io.core.satp.mode.getWidth-1))
   io.core.ex.ready          := !ifc.io.busy && !(replayed && !io.issue.ready)
 
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.Vf0,
+    clock,
+    reset,
+    io.core.hartId,
+    pfc.io.s0.in.valid,
+    pfc.io.s0.in.bits.uopId,
+  )
+
   pfc.io.s1.rs1.valid := pfc.io.s1.inst.isOpf && !pfc.io.s1.inst.vmu
   pfc.io.s1.rs1.bits := io.core.mem.frs1
   pfc.io.s1.kill := io.core.mem.kill || !RegEnable(io.core.ex.fire, io.core.ex.valid)
+
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.Vf1,
+    clock,
+    reset,
+    io.core.hartId,
+    pfc.io.s1.valid,
+    pfc.io.s1.inst.uopId,
+  )
 
   io.core.mem.tlb_req.valid := Mux(ifc.io.busy, ifc.io.s1_tlb_req.valid, pfc.io.s1.tlb_req.valid)
   io.core.mem.tlb_req.bits  := Mux(ifc.io.busy, ifc.io.s1_tlb_req.bits,  pfc.io.s1.tlb_req.bits)
@@ -87,6 +106,15 @@ class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Pa
   pfc.io.s2.frm := io.core.wb.frm
   ifc.io.in := pfc.io.s2.internal_replay
 
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.Vf2,
+    clock,
+    reset,
+    io.core.hartId,
+    pfc.io.s2.inst.valid,
+    pfc.io.s2.inst.bits.uopId,
+  )
+
   when (!io.issue.ready && pfc.io.s2.inst.valid) { replayed := true.B }
   when (io.issue.ready) { replayed := false.B }
 
@@ -94,6 +122,15 @@ class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Pa
   io.issue.bits  := Mux(ifc.io.busy, ifc.io.issue.bits , pfc.io.s2.issue.bits)
   ifc.io.issue.ready    := io.issue.ready
   pfc.io.s2.issue.ready := !ifc.io.busy && io.issue.ready
+
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.Ifc,
+    clock,
+    reset,
+    io.core.hartId,
+    ifc.io.in.valid,
+    ifc.io.inst.uopId,
+  )
 
   io.core.trap_check_busy := pfc.io.busy || ifc.io.busy
 

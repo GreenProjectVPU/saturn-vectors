@@ -3,12 +3,15 @@ package saturn.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile.CoreModule
 import freechips.rocketchip.util._
 import saturn.common._
+import shuttle.trace.KanataTracer
 
 class RegisterAccess(exSeqs: Int, maxExuDepth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val hartId = Input(UInt(hartIdLen.W))
+
     val vls = new Bundle {
       val rvm = Flipped(new VectorReadIO)
     }
@@ -56,20 +59,43 @@ class RegisterAccess(exSeqs: Int, maxExuDepth: Int)(implicit p: Parameters) exte
   val resetting = RegInit(true.B)
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
 
+  vrf.io.hartId := io.hartId
+
   // LL writes
   vrf.io.ll_writes(0).valid := resetting
   vrf.io.ll_writes(0).bits.eg := reset_ctr
   vrf.io.ll_writes(0).bits.data := 0.U
   vrf.io.ll_writes(0).bits.mask := ~(0.U(dLen.W))
+  vrf.io.ll_writes(0).bits.uopId := ~0.U(64.W)
   vrf.io.ll_writes(1) <> io.load_write
   for (i <- 0 until exSeqs) {
     vrf.io.ll_writes(2+i) <> io.iter_writes(i)
+  }
+
+  for (write <- vrf.io.ll_writes.view.drop(1)) {
+    KanataTracer.saturnStage(
+      KanataTracer.SaturnStage.Vwb,
+      clock,
+      reset,
+      io.hartId,
+      write.valid,
+      write.bits.uopId,
+    )
   }
 
   // Pipe writes
   for (i <- 0 until exSeqs) {
     vrf.io.pipe_write_reqs(i) <> io.vxs(i).pipe_write_req
     vrf.io.pipe_writes(i) <> io.pipe_writes(i)
+
+    KanataTracer.saturnStage(
+      KanataTracer.SaturnStage.Vwb,
+      clock,
+      reset,
+      io.hartId,
+      vrf.io.pipe_writes(i).valid,
+      vrf.io.pipe_writes(i).bits.uopId,
+    )
   }
 
   // Reads

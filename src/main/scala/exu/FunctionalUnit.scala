@@ -32,6 +32,9 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
   val hazard = Output(Valid(new PipeHazard(10)))
   val acc = Output(Bool())
   val tail = Output(Bool())
+  val valid = Output(Bool())
+  val op = Output(new ExecuteMicroOpWithData(1))
+  val last = Output(Bool())
 
   val busy = Output(Bool())
 }
@@ -47,6 +50,16 @@ abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) wi
 
 abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) extends FunctionalUnit()(p) {
   val io = IO(new PipelinedFunctionalUnitIO(depth))
+
+  // the last stage is always invalid if the pipeline is more than 1 stage long.
+  val lastStage = if (depth > 1) {
+    RegNext(io.pipe(depth - 2))
+  } else {
+    io.pipe(depth - 1)
+  }
+
+  io.scalar_write.bits.uopId := lastStage.bits.uopId
+  io.write.bits.uopId := lastStage.bits.uopId
 
   require (depth > 0)
 
@@ -72,6 +85,10 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val last = Wire(Bool())
 
   io.busy := valid
+  io.valid := valid
+  io.op := op
+  io.last := last
+  io.write.bits.uopId := op.uopId
 
   when (io.iss.valid) {
     assert(!valid || last)

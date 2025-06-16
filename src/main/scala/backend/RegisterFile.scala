@@ -3,9 +3,10 @@ package saturn.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile.CoreModule
 import freechips.rocketchip.util._
 import saturn.common._
+import shuttle.trace.KanataTracer
 
 class OldestRRArbiter(val n: Int)(implicit p: Parameters) extends Module {
   val io = IO(new ArbiterIO(new VectorReadReq, n))
@@ -50,6 +51,7 @@ class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreM
 
 class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val hartId = Input(UInt(hartIdLen.W))
     val read = Vec(reads, Flipped(new VectorReadIO))
     val mask_read = Vec(maskReads, Flipped(new VectorReadIO))
     val write = Input(Valid(new VectorWrite(dLen)))
@@ -114,6 +116,15 @@ class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(imp
         write.bits.mask.asBools)
     }
   }
+
+  KanataTracer.saturnStage(
+    KanataTracer.SaturnStage.VwbEnd,
+    clock,
+    reset,
+    io.hartId,
+    write.valid && write.bits.uopId =/= ~0.U(64.W),
+    write.bits.uopId,
+  )
 }
 
 class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrites: Int, maxDepth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -123,6 +134,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
   require(nBanks == 1 || nBanks == 2 || nBanks == 4)
 
   val io = IO(new Bundle {
+    val hartId = Input(UInt(hartIdLen.W))
     val read = MixedVec(reads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
     val mask_read = MixedVec(maskReads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
     val pipe_write_reqs = Vec(pipeWrites, Flipped(new VectorPipeWriteReqIO(maxDepth)))
@@ -179,12 +191,15 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
     val bank_write_data = Mux1H(bank_match, io.pipe_writes.map(_.bits.data))
     val bank_write_mask = Mux1H(bank_match, io.pipe_writes.map(_.bits.mask))
     val bank_write_eg   = Mux1H(bank_match, io.pipe_writes.map(_.bits.eg))
+    val bank_write_uopId = Mux1H(bank_match, io.pipe_writes.map(_.bits.uopId))
     val bank_write_valid = bank_match.orR
 
+    rf.io.hartId := io.hartId
     rf.io.write.valid := bank_write_valid
     rf.io.write.bits.data := bank_write_data
     rf.io.write.bits.mask := bank_write_mask
     rf.io.write.bits.eg := bank_write_eg >> vrfBankBits
+    rf.io.write.bits.uopId := bank_write_uopId
     when (bank_write_valid) { PopCount(bank_match) === 1.U }
 
     val ll_arb = Module(new Arbiter(new VectorWrite(dLen), llWrites))
@@ -195,6 +210,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
       ll_arb.io.in(j).bits.eg   := w.bits.eg >> vrfBankBits
       ll_arb.io.in(j).bits.data := w.bits.data
       ll_arb.io.in(j).bits.mask := w.bits.mask
+      ll_arb.io.in(j).bits.uopId := w.bits.uopId
       when (ll_arb.io.in(j).ready && w.bits.bankId === i.U) {
         w.ready := true.B
       }
