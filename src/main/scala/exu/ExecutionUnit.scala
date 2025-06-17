@@ -137,7 +137,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
       // the last stage is always invalid if the pipeline is more than 1 stage long.
       val (last_stage_valid, last_stage_bits) = if (fu.depth > 1) {
-        (RegNext(pipe_valids(fu.depth - 1)), RegNext(pipe_bits(fu.depth - 1)))
+        (RegNext(pipe_valids(fu.depth - 2)), RegNext(pipe_bits(fu.depth - 2)))
       } else {
         (pipe_valids(fu.depth - 1), pipe_bits(fu.depth - 1))
       }
